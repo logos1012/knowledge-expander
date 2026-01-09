@@ -12,8 +12,8 @@ export class AIService {
 		this.settings = settings;
 	}
 
-	async expandKnowledge(selectedText: string, context: string): Promise<AIResponse> {
-		const prompt = this.buildPrompt(selectedText, context);
+	async expandKnowledge(selectedText: string, context: string, userQuestion: string = ''): Promise<AIResponse> {
+		const prompt = this.buildPrompt(selectedText, context, userQuestion);
 
 		let response: AIResponse;
 		switch (this.settings.aiProvider) {
@@ -29,6 +29,23 @@ export class AIService {
 			default:
 				throw new Error(`Unknown AI provider: ${this.settings.aiProvider}`);
 		}
+
+		const strippedContent = this.stripMarkdownCodeBlock(response.content);
+		const parsed = this.parseResponse(strippedContent);
+		
+		response.title = parsed.title;
+		response.content = parsed.content;
+		
+		return response;
+	}
+
+	async webSearch(selectedText: string, context: string, userQuestion: string = ''): Promise<AIResponse> {
+		if (!this.settings.openaiApiKey) {
+			throw new Error('OpenAI API key is required for web search');
+		}
+
+		const prompt = this.buildWebSearchPrompt(selectedText, context, userQuestion);
+		const response = await this.callOpenAIWebSearch(prompt);
 
 		const strippedContent = this.stripMarkdownCodeBlock(response.content);
 		const parsed = this.parseResponse(strippedContent);
@@ -57,7 +74,12 @@ export class AIService {
 		return result.trim();
 	}
 
-	private buildPrompt(selectedText: string, context: string): string {
+	private buildPrompt(selectedText: string, context: string, userQuestion: string = ''): string {
+		let questionSection = '';
+		if (userQuestion.trim()) {
+			questionSection = `\n\n사용자의 추가 질문:\n"${userQuestion}"`;
+		}
+
 		return `${this.settings.systemPrompt}
 
 반드시 응답의 첫 줄에 이 내용을 요약하는 간결한 제목을 작성해주세요. 제목은 "제목: "으로 시작하고, 20자 이내로 작성합니다.
@@ -67,7 +89,30 @@ export class AIService {
 "${selectedText}"
 
 주변 맥락:
-${context}
+${context}${questionSection}
+---`;
+	}
+
+	private buildWebSearchPrompt(selectedText: string, context: string, userQuestion: string = ''): string {
+		let questionSection = '';
+		if (userQuestion.trim()) {
+			questionSection = `\n\n사용자의 추가 질문:\n"${userQuestion}"`;
+		}
+
+		return `다음 텍스트에 대해 웹 검색을 통해 최신 정보와 관련 내용을 찾아 설명해주세요.
+
+반드시 응답의 첫 줄에 이 내용을 요약하는 간결한 제목을 작성해주세요. 제목은 "제목: "으로 시작하고, 20자 이내로 작성합니다.
+
+1000자 이내로 작성하고, md 파일의 마크다운 형태를 유지해주세요. 기본적인 소제목은 '##'를 사용하고, 최대 '###'까지만 사용합니다.
+
+검색 결과의 출처가 있다면 문서 하단에 참고 자료로 링크를 포함해주세요.
+
+---
+선택된 텍스트:
+"${selectedText}"
+
+주변 맥락:
+${context}${questionSection}
 ---`;
 	}
 
@@ -123,6 +168,54 @@ ${context}
 			outputTokens: usage.completion_tokens,
 			totalTokens: usage.total_tokens,
 			estimatedCost: this.calculateCost('openai', this.settings.openaiModel, usage.prompt_tokens, usage.completion_tokens),
+		};
+	}
+
+	private async callOpenAIWebSearch(prompt: string): Promise<AIResponse> {
+		if (!this.settings.openaiApiKey) {
+			throw new Error('OpenAI API key is not configured');
+		}
+
+		const response = await requestUrl({
+			url: 'https://api.openai.com/v1/responses',
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Authorization': `Bearer ${this.settings.openaiApiKey}`,
+			},
+			body: JSON.stringify({
+				model: 'gpt-4o',
+				tools: [{ type: 'web_search_preview' }],
+				input: prompt,
+			}),
+		});
+
+		const data = response.json;
+		
+		let content = '';
+		if (data.output && Array.isArray(data.output)) {
+			for (const item of data.output) {
+				if (item.type === 'message' && item.content) {
+					for (const contentItem of item.content) {
+						if (contentItem.type === 'output_text') {
+							content += contentItem.text;
+						}
+					}
+				}
+			}
+		}
+
+		const usage = data.usage || { input_tokens: 0, output_tokens: 0 };
+		const inputTokens = usage.input_tokens || 0;
+		const outputTokens = usage.output_tokens || 0;
+
+		return {
+			title: '',
+			content,
+			inputTokens,
+			outputTokens,
+			totalTokens: inputTokens + outputTokens,
+			estimatedCost: this.calculateCost('openai', 'gpt-4o', inputTokens, outputTokens),
 		};
 	}
 

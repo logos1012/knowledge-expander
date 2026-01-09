@@ -1,5 +1,6 @@
 import { Editor, MarkdownView, Menu, Notice, Plugin, TFile } from 'obsidian';
 import { AIService } from './ai-service';
+import { InputPromptModal } from './input-modal';
 import { KeywordExtractor } from './keyword-extractor';
 import { KnowledgeExpanderSettingTab } from './settings';
 import { DEFAULT_SETTINGS, KnowledgeExpanderSettings } from './types';
@@ -23,7 +24,15 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 			id: 'expand-knowledge',
 			name: 'Expand selected text',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				this.expandSelectedTextFromEditor(editor, view);
+				this.showExpandPrompt(editor, view);
+			},
+		});
+
+		this.addCommand({
+			id: 'web-search',
+			name: 'Web search for selected text',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				this.showWebSearchPrompt(editor, view);
 			},
 		});
 
@@ -36,7 +45,15 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 							.setTitle('Expand Knowledge')
 							.setIcon('lightbulb')
 							.onClick(() => {
-								this.expandSelectedTextFromEditor(editor, view);
+								this.showExpandPrompt(editor, view);
+							});
+					});
+					menu.addItem((item) => {
+						item
+							.setTitle('Web Search')
+							.setIcon('search')
+							.onClick(() => {
+								this.showWebSearchPrompt(editor, view);
 							});
 					});
 				}
@@ -67,10 +84,46 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 		}
 
 		const editor = activeView.editor;
-		await this.expandSelectedTextFromEditor(editor, activeView);
+		this.showExpandPrompt(editor, activeView);
 	}
 
-	private async expandSelectedTextFromEditor(editor: Editor, view: MarkdownView) {
+	private showExpandPrompt(editor: Editor, view: MarkdownView) {
+		const selection = editor.getSelection();
+		if (!selection) {
+			new Notice('Please select some text to expand');
+			return;
+		}
+
+		new InputPromptModal(
+			this.app,
+			'Expand Knowledge',
+			'예: 이 개념의 역사적 배경이 궁금해요 / 실제 사례를 알고 싶어요',
+			selection,
+			(userQuestion) => {
+				this.expandSelectedTextFromEditor(editor, view, userQuestion);
+			}
+		).open();
+	}
+
+	private showWebSearchPrompt(editor: Editor, view: MarkdownView) {
+		const selection = editor.getSelection();
+		if (!selection) {
+			new Notice('Please select some text to search');
+			return;
+		}
+
+		new InputPromptModal(
+			this.app,
+			'Web Search',
+			'예: 최신 동향이 궁금해요 / 관련 뉴스를 찾아줘',
+			selection,
+			(userQuestion) => {
+				this.webSearchFromEditor(editor, view, userQuestion);
+			}
+		).open();
+	}
+
+	private async expandSelectedTextFromEditor(editor: Editor, view: MarkdownView, userQuestion: string = '') {
 		const selection = editor.getSelection();
 		if (!selection) {
 			new Notice('Please select some text to expand');
@@ -82,7 +135,7 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 		new Notice('Expanding knowledge... Please wait.');
 
 		try {
-			const response = await this.aiService.expandKnowledge(selection, context);
+			const response = await this.aiService.expandKnowledge(selection, context, userQuestion);
 			
 			const now = new Date();
 			const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -119,6 +172,59 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 
 		} catch (error) {
 			console.error('Knowledge expansion error:', error);
+			new Notice(`❌ Error: ${error.message}`);
+		}
+	}
+
+	private async webSearchFromEditor(editor: Editor, view: MarkdownView, userQuestion: string = '') {
+		const selection = editor.getSelection();
+		if (!selection) {
+			new Notice('Please select some text to search');
+			return;
+		}
+
+		const context = this.getSurroundingContext(editor);
+
+		new Notice('🔍 Searching the web... Please wait.');
+
+		try {
+			const response = await this.aiService.webSearch(selection, context, userQuestion);
+			
+			const now = new Date();
+			const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+			const noteTitle = response.title || this.generateFallbackTitle(selection);
+			const sanitizedTitle = this.sanitizeFileName(noteTitle);
+			const fileName = `${dateStr}_${sanitizedTitle}`;
+
+			const frontMatter = this.generateFrontMatter(selection, view.file?.basename || 'Unknown', response.content);
+
+			let noteContent = await this.getTemplateContent();
+			
+			const aiContent = response.content;
+			if (noteContent) {
+				noteContent = noteContent.replace('{{content}}', aiContent);
+			} else {
+				noteContent = `${frontMatter}\n\n${aiContent}`;
+			}
+
+			const savePath = this.getNoteSavePath(fileName);
+
+			const newFile = await this.app.vault.create(savePath, noteContent);
+
+			const wikiLink = `[[${newFile.basename}|${selection}]]`;
+			editor.replaceSelection(wikiLink);
+
+			const costStr = response.estimatedCost.toFixed(6);
+			new Notice(
+				`✅ Web search complete!\n` +
+				`📝 Note created: ${newFile.basename}\n` +
+				`💰 Estimated cost: $${costStr}\n` +
+				`📊 Tokens: ${response.totalTokens}`,
+				10000
+			);
+
+		} catch (error) {
+			console.error('Web search error:', error);
 			new Notice(`❌ Error: ${error.message}`);
 		}
 	}

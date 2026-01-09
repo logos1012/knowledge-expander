@@ -27,7 +27,7 @@ __export(main_exports, {
   default: () => KnowledgeExpanderPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/ai-service.ts
 var import_obsidian = require("obsidian");
@@ -72,8 +72,8 @@ var AIService = class {
   updateSettings(settings) {
     this.settings = settings;
   }
-  async expandKnowledge(selectedText, context) {
-    const prompt = this.buildPrompt(selectedText, context);
+  async expandKnowledge(selectedText, context, userQuestion = "") {
+    const prompt = this.buildPrompt(selectedText, context, userQuestion);
     let response;
     switch (this.settings.aiProvider) {
       case "openai":
@@ -94,6 +94,18 @@ var AIService = class {
     response.content = parsed.content;
     return response;
   }
+  async webSearch(selectedText, context, userQuestion = "") {
+    if (!this.settings.openaiApiKey) {
+      throw new Error("OpenAI API key is required for web search");
+    }
+    const prompt = this.buildWebSearchPrompt(selectedText, context, userQuestion);
+    const response = await this.callOpenAIWebSearch(prompt);
+    const strippedContent = this.stripMarkdownCodeBlock(response.content);
+    const parsed = this.parseResponse(strippedContent);
+    response.title = parsed.title;
+    response.content = parsed.content;
+    return response;
+  }
   stripMarkdownCodeBlock(content) {
     let result = content.trim();
     if (result.startsWith("```markdown")) {
@@ -108,7 +120,14 @@ var AIService = class {
     }
     return result.trim();
   }
-  buildPrompt(selectedText, context) {
+  buildPrompt(selectedText, context, userQuestion = "") {
+    let questionSection = "";
+    if (userQuestion.trim()) {
+      questionSection = `
+
+\uC0AC\uC6A9\uC790\uC758 \uCD94\uAC00 \uC9C8\uBB38:
+"${userQuestion}"`;
+    }
     return `${this.settings.systemPrompt}
 
 \uBC18\uB4DC\uC2DC \uC751\uB2F5\uC758 \uCCAB \uC904\uC5D0 \uC774 \uB0B4\uC6A9\uC744 \uC694\uC57D\uD558\uB294 \uAC04\uACB0\uD55C \uC81C\uBAA9\uC744 \uC791\uC131\uD574\uC8FC\uC138\uC694. \uC81C\uBAA9\uC740 "\uC81C\uBAA9: "\uC73C\uB85C \uC2DC\uC791\uD558\uACE0, 20\uC790 \uC774\uB0B4\uB85C \uC791\uC131\uD569\uB2C8\uB2E4.
@@ -118,7 +137,31 @@ var AIService = class {
 "${selectedText}"
 
 \uC8FC\uBCC0 \uB9E5\uB77D:
-${context}
+${context}${questionSection}
+---`;
+  }
+  buildWebSearchPrompt(selectedText, context, userQuestion = "") {
+    let questionSection = "";
+    if (userQuestion.trim()) {
+      questionSection = `
+
+\uC0AC\uC6A9\uC790\uC758 \uCD94\uAC00 \uC9C8\uBB38:
+"${userQuestion}"`;
+    }
+    return `\uB2E4\uC74C \uD14D\uC2A4\uD2B8\uC5D0 \uB300\uD574 \uC6F9 \uAC80\uC0C9\uC744 \uD1B5\uD574 \uCD5C\uC2E0 \uC815\uBCF4\uC640 \uAD00\uB828 \uB0B4\uC6A9\uC744 \uCC3E\uC544 \uC124\uBA85\uD574\uC8FC\uC138\uC694.
+
+\uBC18\uB4DC\uC2DC \uC751\uB2F5\uC758 \uCCAB \uC904\uC5D0 \uC774 \uB0B4\uC6A9\uC744 \uC694\uC57D\uD558\uB294 \uAC04\uACB0\uD55C \uC81C\uBAA9\uC744 \uC791\uC131\uD574\uC8FC\uC138\uC694. \uC81C\uBAA9\uC740 "\uC81C\uBAA9: "\uC73C\uB85C \uC2DC\uC791\uD558\uACE0, 20\uC790 \uC774\uB0B4\uB85C \uC791\uC131\uD569\uB2C8\uB2E4.
+
+1000\uC790 \uC774\uB0B4\uB85C \uC791\uC131\uD558\uACE0, md \uD30C\uC77C\uC758 \uB9C8\uD06C\uB2E4\uC6B4 \uD615\uD0DC\uB97C \uC720\uC9C0\uD574\uC8FC\uC138\uC694. \uAE30\uBCF8\uC801\uC778 \uC18C\uC81C\uBAA9\uC740 '##'\uB97C \uC0AC\uC6A9\uD558\uACE0, \uCD5C\uB300 '###'\uAE4C\uC9C0\uB9CC \uC0AC\uC6A9\uD569\uB2C8\uB2E4.
+
+\uAC80\uC0C9 \uACB0\uACFC\uC758 \uCD9C\uCC98\uAC00 \uC788\uB2E4\uBA74 \uBB38\uC11C \uD558\uB2E8\uC5D0 \uCC38\uACE0 \uC790\uB8CC\uB85C \uB9C1\uD06C\uB97C \uD3EC\uD568\uD574\uC8FC\uC138\uC694.
+
+---
+\uC120\uD0DD\uB41C \uD14D\uC2A4\uD2B8:
+"${selectedText}"
+
+\uC8FC\uBCC0 \uB9E5\uB77D:
+${context}${questionSection}
 ---`;
   }
   parseResponse(rawContent) {
@@ -165,6 +208,48 @@ ${context}
       outputTokens: usage.completion_tokens,
       totalTokens: usage.total_tokens,
       estimatedCost: this.calculateCost("openai", this.settings.openaiModel, usage.prompt_tokens, usage.completion_tokens)
+    };
+  }
+  async callOpenAIWebSearch(prompt) {
+    if (!this.settings.openaiApiKey) {
+      throw new Error("OpenAI API key is not configured");
+    }
+    const response = await (0, import_obsidian.requestUrl)({
+      url: "https://api.openai.com/v1/responses",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.settings.openaiApiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        tools: [{ type: "web_search_preview" }],
+        input: prompt
+      })
+    });
+    const data = response.json;
+    let content = "";
+    if (data.output && Array.isArray(data.output)) {
+      for (const item of data.output) {
+        if (item.type === "message" && item.content) {
+          for (const contentItem of item.content) {
+            if (contentItem.type === "output_text") {
+              content += contentItem.text;
+            }
+          }
+        }
+      }
+    }
+    const usage = data.usage || { input_tokens: 0, output_tokens: 0 };
+    const inputTokens = usage.input_tokens || 0;
+    const outputTokens = usage.output_tokens || 0;
+    return {
+      title: "",
+      content,
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      estimatedCost: this.calculateCost("openai", "gpt-4o", inputTokens, outputTokens)
     };
   }
   async callGemini(prompt) {
@@ -240,6 +325,44 @@ ${context}
     const inputCost = inputTokens / 1e6 * modelPricing.input;
     const outputCost = outputTokens / 1e6 * modelPricing.output;
     return inputCost + outputCost;
+  }
+};
+
+// src/input-modal.ts
+var import_obsidian2 = require("obsidian");
+var InputPromptModal = class extends import_obsidian2.Modal {
+  constructor(app, title, placeholder, selectedText, onSubmit) {
+    super(app);
+    this.userInput = "";
+    this.title = title;
+    this.placeholder = placeholder;
+    this.selectedText = selectedText;
+    this.onSubmit = onSubmit;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl("h2", { text: this.title });
+    contentEl.createEl("p", {
+      text: `\uC120\uD0DD\uB41C \uD14D\uC2A4\uD2B8: "${this.selectedText.substring(0, 100)}${this.selectedText.length > 100 ? "..." : ""}"`,
+      cls: "selected-text-preview"
+    });
+    new import_obsidian2.Setting(contentEl).setName("\uCD94\uAC00 \uC9C8\uBB38 (\uC120\uD0DD\uC0AC\uD56D)").setDesc("\uC774 \uD14D\uC2A4\uD2B8\uC5D0\uC11C \uD2B9\uBCC4\uD788 \uAD81\uAE08\uD55C \uC810\uC774 \uC788\uB2E4\uBA74 \uC785\uB825\uD558\uC138\uC694. \uBE44\uC6CC\uB450\uBA74 \uC77C\uBC18\uC801\uC778 \uC124\uBA85\uC744 \uC81C\uACF5\uD569\uB2C8\uB2E4.").addTextArea((text) => {
+      text.setPlaceholder(this.placeholder).onChange((value) => {
+        this.userInput = value;
+      });
+      text.inputEl.rows = 4;
+      text.inputEl.cols = 50;
+    });
+    new import_obsidian2.Setting(contentEl).addButton((btn) => btn.setButtonText("\uD655\uC778").setCta().onClick(() => {
+      this.close();
+      this.onSubmit(this.userInput);
+    })).addButton((btn) => btn.setButtonText("\uCDE8\uC18C").onClick(() => {
+      this.close();
+    }));
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
   }
 };
 
@@ -414,8 +537,8 @@ var KeywordExtractor = class {
 };
 
 // src/settings.ts
-var import_obsidian2 = require("obsidian");
-var KnowledgeExpanderSettingTab = class extends import_obsidian2.PluginSettingTab {
+var import_obsidian3 = require("obsidian");
+var KnowledgeExpanderSettingTab = class extends import_obsidian3.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -424,51 +547,51 @@ var KnowledgeExpanderSettingTab = class extends import_obsidian2.PluginSettingTa
     const { containerEl } = this;
     containerEl.empty();
     containerEl.createEl("h2", { text: "Knowledge Finder Settings" });
-    new import_obsidian2.Setting(containerEl).setName("AI Provider").setDesc("Select the AI provider to use for knowledge expansion").addDropdown((dropdown) => dropdown.addOption("openai", "OpenAI (ChatGPT)").addOption("gemini", "Google Gemini").addOption("claude", "Anthropic Claude").setValue(this.plugin.settings.aiProvider).onChange(async (value) => {
+    new import_obsidian3.Setting(containerEl).setName("AI Provider").setDesc("Select the AI provider to use for knowledge expansion").addDropdown((dropdown) => dropdown.addOption("openai", "OpenAI (ChatGPT)").addOption("gemini", "Google Gemini").addOption("claude", "Anthropic Claude").setValue(this.plugin.settings.aiProvider).onChange(async (value) => {
       this.plugin.settings.aiProvider = value;
       await this.plugin.saveSettings();
       this.display();
     }));
     if (this.plugin.settings.aiProvider === "openai") {
       containerEl.createEl("h3", { text: "OpenAI Settings" });
-      new import_obsidian2.Setting(containerEl).setName("OpenAI API Key").setDesc("Your OpenAI API key").addText((text) => text.setPlaceholder("sk-...").setValue(this.plugin.settings.openaiApiKey).onChange(async (value) => {
+      new import_obsidian3.Setting(containerEl).setName("OpenAI API Key").setDesc("Your OpenAI API key").addText((text) => text.setPlaceholder("sk-...").setValue(this.plugin.settings.openaiApiKey).onChange(async (value) => {
         this.plugin.settings.openaiApiKey = value;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian2.Setting(containerEl).setName("OpenAI Model").setDesc("Select the OpenAI model to use").addDropdown((dropdown) => dropdown.addOption("gpt-4o", "GPT-4o").addOption("gpt-4o-mini", "GPT-4o Mini").addOption("gpt-4-turbo", "GPT-4 Turbo").addOption("gpt-3.5-turbo", "GPT-3.5 Turbo").setValue(this.plugin.settings.openaiModel).onChange(async (value) => {
+      new import_obsidian3.Setting(containerEl).setName("OpenAI Model").setDesc("Select the OpenAI model to use").addDropdown((dropdown) => dropdown.addOption("gpt-4o", "GPT-4o").addOption("gpt-4o-mini", "GPT-4o Mini").addOption("gpt-4-turbo", "GPT-4 Turbo").addOption("gpt-3.5-turbo", "GPT-3.5 Turbo").setValue(this.plugin.settings.openaiModel).onChange(async (value) => {
         this.plugin.settings.openaiModel = value;
         await this.plugin.saveSettings();
       }));
     }
     if (this.plugin.settings.aiProvider === "gemini") {
       containerEl.createEl("h3", { text: "Google Gemini Settings" });
-      new import_obsidian2.Setting(containerEl).setName("Gemini API Key").setDesc("Your Google Gemini API key").addText((text) => text.setPlaceholder("API key").setValue(this.plugin.settings.geminiApiKey).onChange(async (value) => {
+      new import_obsidian3.Setting(containerEl).setName("Gemini API Key").setDesc("Your Google Gemini API key").addText((text) => text.setPlaceholder("API key").setValue(this.plugin.settings.geminiApiKey).onChange(async (value) => {
         this.plugin.settings.geminiApiKey = value;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian2.Setting(containerEl).setName("Gemini Model").setDesc("Select the Gemini model to use").addDropdown((dropdown) => dropdown.addOption("gemini-1.5-flash", "Gemini 1.5 Flash").addOption("gemini-1.5-pro", "Gemini 1.5 Pro").addOption("gemini-2.0-flash", "Gemini 2.0 Flash").setValue(this.plugin.settings.geminiModel).onChange(async (value) => {
+      new import_obsidian3.Setting(containerEl).setName("Gemini Model").setDesc("Select the Gemini model to use").addDropdown((dropdown) => dropdown.addOption("gemini-1.5-flash", "Gemini 1.5 Flash").addOption("gemini-1.5-pro", "Gemini 1.5 Pro").addOption("gemini-2.0-flash", "Gemini 2.0 Flash").setValue(this.plugin.settings.geminiModel).onChange(async (value) => {
         this.plugin.settings.geminiModel = value;
         await this.plugin.saveSettings();
       }));
     }
     if (this.plugin.settings.aiProvider === "claude") {
       containerEl.createEl("h3", { text: "Anthropic Claude Settings" });
-      new import_obsidian2.Setting(containerEl).setName("Claude API Key").setDesc("Your Anthropic Claude API key").addText((text) => text.setPlaceholder("sk-ant-...").setValue(this.plugin.settings.claudeApiKey).onChange(async (value) => {
+      new import_obsidian3.Setting(containerEl).setName("Claude API Key").setDesc("Your Anthropic Claude API key").addText((text) => text.setPlaceholder("sk-ant-...").setValue(this.plugin.settings.claudeApiKey).onChange(async (value) => {
         this.plugin.settings.claudeApiKey = value;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian2.Setting(containerEl).setName("Claude Model").setDesc("Select the Claude model to use").addDropdown((dropdown) => dropdown.addOption("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet").addOption("claude-3-opus-20240229", "Claude 3 Opus").addOption("claude-3-haiku-20240307", "Claude 3 Haiku").setValue(this.plugin.settings.claudeModel).onChange(async (value) => {
+      new import_obsidian3.Setting(containerEl).setName("Claude Model").setDesc("Select the Claude model to use").addDropdown((dropdown) => dropdown.addOption("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet").addOption("claude-3-opus-20240229", "Claude 3 Opus").addOption("claude-3-haiku-20240307", "Claude 3 Haiku").setValue(this.plugin.settings.claudeModel).onChange(async (value) => {
         this.plugin.settings.claudeModel = value;
         await this.plugin.saveSettings();
       }));
     }
     containerEl.createEl("h3", { text: "Note Settings" });
-    new import_obsidian2.Setting(containerEl).setName("Note Folder Path").setDesc("Folder path where expanded knowledge notes will be saved. Leave empty to use the default new note location.").addText((text) => text.setPlaceholder("folder/subfolder").setValue(this.plugin.settings.notePath).onChange(async (value) => {
+    new import_obsidian3.Setting(containerEl).setName("Note Folder Path").setDesc("Folder path where expanded knowledge notes will be saved. Leave empty to use the default new note location.").addText((text) => text.setPlaceholder("folder/subfolder").setValue(this.plugin.settings.notePath).onChange(async (value) => {
       this.plugin.settings.notePath = value;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("h3", { text: "Prompt Settings" });
-    new import_obsidian2.Setting(containerEl).setName("System Prompt").setDesc("The prompt used to generate knowledge expansion. Use this to customize the AI's response style.").addTextArea((text) => {
+    new import_obsidian3.Setting(containerEl).setName("System Prompt").setDesc("The prompt used to generate knowledge expansion. Use this to customize the AI's response style.").addTextArea((text) => {
       text.setPlaceholder("Enter your system prompt...").setValue(this.plugin.settings.systemPrompt).onChange(async (value) => {
         this.plugin.settings.systemPrompt = value;
         await this.plugin.saveSettings();
@@ -476,7 +599,7 @@ var KnowledgeExpanderSettingTab = class extends import_obsidian2.PluginSettingTa
       text.inputEl.rows = 8;
       text.inputEl.cols = 50;
     });
-    new import_obsidian2.Setting(containerEl).setName("Output Template Path").setDesc("Path to a template file for the generated notes. The template can include {{content}} placeholder for AI response.").addText((text) => text.setPlaceholder("templates/knowledge-template.md").setValue(this.plugin.settings.templatePath).onChange(async (value) => {
+    new import_obsidian3.Setting(containerEl).setName("Output Template Path").setDesc("Path to a template file for the generated notes. The template can include {{content}} placeholder for AI response.").addText((text) => text.setPlaceholder("templates/knowledge-template.md").setValue(this.plugin.settings.templatePath).onChange(async (value) => {
       this.plugin.settings.templatePath = value;
       await this.plugin.saveSettings();
     }));
@@ -484,7 +607,7 @@ var KnowledgeExpanderSettingTab = class extends import_obsidian2.PluginSettingTa
 };
 
 // src/main.ts
-var KnowledgeExpanderPlugin = class extends import_obsidian3.Plugin {
+var KnowledgeExpanderPlugin = class extends import_obsidian4.Plugin {
   async onload() {
     await this.loadSettings();
     this.aiService = new AIService(this.settings);
@@ -496,7 +619,14 @@ var KnowledgeExpanderPlugin = class extends import_obsidian3.Plugin {
       id: "expand-knowledge",
       name: "Expand selected text",
       editorCallback: (editor, view) => {
-        this.expandSelectedTextFromEditor(editor, view);
+        this.showExpandPrompt(editor, view);
+      }
+    });
+    this.addCommand({
+      id: "web-search",
+      name: "Web search for selected text",
+      editorCallback: (editor, view) => {
+        this.showWebSearchPrompt(editor, view);
       }
     });
     this.registerEvent(
@@ -505,7 +635,12 @@ var KnowledgeExpanderPlugin = class extends import_obsidian3.Plugin {
         if (selection) {
           menu.addItem((item) => {
             item.setTitle("Expand Knowledge").setIcon("lightbulb").onClick(() => {
-              this.expandSelectedTextFromEditor(editor, view);
+              this.showExpandPrompt(editor, view);
+            });
+          });
+          menu.addItem((item) => {
+            item.setTitle("Web Search").setIcon("search").onClick(() => {
+              this.showWebSearchPrompt(editor, view);
             });
           });
         }
@@ -525,25 +660,57 @@ var KnowledgeExpanderPlugin = class extends import_obsidian3.Plugin {
     }
   }
   async expandSelectedText() {
-    const activeView = this.app.workspace.getActiveViewOfType(import_obsidian3.MarkdownView);
+    const activeView = this.app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView);
     if (!activeView) {
-      new import_obsidian3.Notice("No active markdown view");
+      new import_obsidian4.Notice("No active markdown view");
       return;
     }
     const editor = activeView.editor;
-    await this.expandSelectedTextFromEditor(editor, activeView);
+    this.showExpandPrompt(editor, activeView);
   }
-  async expandSelectedTextFromEditor(editor, view) {
+  showExpandPrompt(editor, view) {
+    const selection = editor.getSelection();
+    if (!selection) {
+      new import_obsidian4.Notice("Please select some text to expand");
+      return;
+    }
+    new InputPromptModal(
+      this.app,
+      "Expand Knowledge",
+      "\uC608: \uC774 \uAC1C\uB150\uC758 \uC5ED\uC0AC\uC801 \uBC30\uACBD\uC774 \uAD81\uAE08\uD574\uC694 / \uC2E4\uC81C \uC0AC\uB840\uB97C \uC54C\uACE0 \uC2F6\uC5B4\uC694",
+      selection,
+      (userQuestion) => {
+        this.expandSelectedTextFromEditor(editor, view, userQuestion);
+      }
+    ).open();
+  }
+  showWebSearchPrompt(editor, view) {
+    const selection = editor.getSelection();
+    if (!selection) {
+      new import_obsidian4.Notice("Please select some text to search");
+      return;
+    }
+    new InputPromptModal(
+      this.app,
+      "Web Search",
+      "\uC608: \uCD5C\uC2E0 \uB3D9\uD5A5\uC774 \uAD81\uAE08\uD574\uC694 / \uAD00\uB828 \uB274\uC2A4\uB97C \uCC3E\uC544\uC918",
+      selection,
+      (userQuestion) => {
+        this.webSearchFromEditor(editor, view, userQuestion);
+      }
+    ).open();
+  }
+  async expandSelectedTextFromEditor(editor, view, userQuestion = "") {
     var _a;
     const selection = editor.getSelection();
     if (!selection) {
-      new import_obsidian3.Notice("Please select some text to expand");
+      new import_obsidian4.Notice("Please select some text to expand");
       return;
     }
     const context = this.getSurroundingContext(editor);
-    new import_obsidian3.Notice("Expanding knowledge... Please wait.");
+    new import_obsidian4.Notice("Expanding knowledge... Please wait.");
     try {
-      const response = await this.aiService.expandKnowledge(selection, context);
+      const response = await this.aiService.expandKnowledge(selection, context, userQuestion);
       const now = new Date();
       const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
       const noteTitle = response.title || this.generateFallbackTitle(selection);
@@ -564,7 +731,7 @@ ${aiContent}`;
       const wikiLink = `[[${newFile.basename}|${selection}]]`;
       editor.replaceSelection(wikiLink);
       const costStr = response.estimatedCost.toFixed(6);
-      new import_obsidian3.Notice(
+      new import_obsidian4.Notice(
         `\u2705 Knowledge expanded!
 \u{1F4DD} Note created: ${newFile.basename}
 \u{1F4B0} Estimated cost: $${costStr}
@@ -573,7 +740,50 @@ ${aiContent}`;
       );
     } catch (error) {
       console.error("Knowledge expansion error:", error);
-      new import_obsidian3.Notice(`\u274C Error: ${error.message}`);
+      new import_obsidian4.Notice(`\u274C Error: ${error.message}`);
+    }
+  }
+  async webSearchFromEditor(editor, view, userQuestion = "") {
+    var _a;
+    const selection = editor.getSelection();
+    if (!selection) {
+      new import_obsidian4.Notice("Please select some text to search");
+      return;
+    }
+    const context = this.getSurroundingContext(editor);
+    new import_obsidian4.Notice("\u{1F50D} Searching the web... Please wait.");
+    try {
+      const response = await this.aiService.webSearch(selection, context, userQuestion);
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
+      const noteTitle = response.title || this.generateFallbackTitle(selection);
+      const sanitizedTitle = this.sanitizeFileName(noteTitle);
+      const fileName = `${dateStr}_${sanitizedTitle}`;
+      const frontMatter = this.generateFrontMatter(selection, ((_a = view.file) == null ? void 0 : _a.basename) || "Unknown", response.content);
+      let noteContent = await this.getTemplateContent();
+      const aiContent = response.content;
+      if (noteContent) {
+        noteContent = noteContent.replace("{{content}}", aiContent);
+      } else {
+        noteContent = `${frontMatter}
+
+${aiContent}`;
+      }
+      const savePath = this.getNoteSavePath(fileName);
+      const newFile = await this.app.vault.create(savePath, noteContent);
+      const wikiLink = `[[${newFile.basename}|${selection}]]`;
+      editor.replaceSelection(wikiLink);
+      const costStr = response.estimatedCost.toFixed(6);
+      new import_obsidian4.Notice(
+        `\u2705 Web search complete!
+\u{1F4DD} Note created: ${newFile.basename}
+\u{1F4B0} Estimated cost: $${costStr}
+\u{1F4CA} Tokens: ${response.totalTokens}`,
+        1e4
+      );
+    } catch (error) {
+      console.error("Web search error:", error);
+      new import_obsidian4.Notice(`\u274C Error: ${error.message}`);
     }
   }
   getSurroundingContext(editor) {
@@ -629,7 +839,7 @@ related: []
       return null;
     }
     const templateFile = this.app.vault.getAbstractFileByPath(this.settings.templatePath);
-    if (templateFile instanceof import_obsidian3.TFile) {
+    if (templateFile instanceof import_obsidian4.TFile) {
       return await this.app.vault.read(templateFile);
     }
     return null;
