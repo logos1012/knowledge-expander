@@ -135,6 +135,10 @@ ${context}${questionSection}
 		return { title, content };
 	}
 
+	private isResponsesAPIModel(model: string): boolean {
+		return model.startsWith('gpt-5') || model.startsWith('gpt-4.1') || model.startsWith('o3') || model.startsWith('o4');
+	}
+
 	private async callOpenAI(prompt: string): Promise<AIResponse> {
 		if (!this.settings.openaiApiKey) {
 			throw new Error('OpenAI API key is not configured');
@@ -143,6 +147,14 @@ ${context}${questionSection}
 		const model = this.settings.openaiModel || 'gpt-4o-mini';
 		console.log('OpenAI request - model:', model);
 
+		if (this.isResponsesAPIModel(model)) {
+			return this.callOpenAIResponses(prompt, model);
+		} else {
+			return this.callOpenAIChatCompletions(prompt, model);
+		}
+	}
+
+	private async callOpenAIChatCompletions(prompt: string, model: string): Promise<AIResponse> {
 		try {
 			const response = await requestUrl({
 				url: 'https://api.openai.com/v1/chat/completions',
@@ -174,7 +186,56 @@ ${context}${questionSection}
 				estimatedCost: this.calculateCost('openai', model, usage.prompt_tokens, usage.completion_tokens),
 			};
 		} catch (error) {
-			console.error('OpenAI API error:', error);
+			console.error('OpenAI Chat Completions API error:', error);
+			console.error('Model used:', model);
+			throw error;
+		}
+	}
+
+	private async callOpenAIResponses(prompt: string, model: string): Promise<AIResponse> {
+		try {
+			const response = await requestUrl({
+				url: 'https://api.openai.com/v1/responses',
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${this.settings.openaiApiKey}`,
+				},
+				body: JSON.stringify({
+					model: model,
+					input: prompt,
+				}),
+			});
+
+			const data = response.json;
+			
+			let content = '';
+			if (data.output && Array.isArray(data.output)) {
+				for (const item of data.output) {
+					if (item.type === 'message' && item.content) {
+						for (const contentItem of item.content) {
+							if (contentItem.type === 'output_text') {
+								content += contentItem.text;
+							}
+						}
+					}
+				}
+			}
+
+			const usage = data.usage || { input_tokens: 0, output_tokens: 0 };
+			const inputTokens = usage.input_tokens || 0;
+			const outputTokens = usage.output_tokens || 0;
+
+			return {
+				title: '',
+				content,
+				inputTokens,
+				outputTokens,
+				totalTokens: inputTokens + outputTokens,
+				estimatedCost: this.calculateCost('openai', model, inputTokens, outputTokens),
+			};
+		} catch (error) {
+			console.error('OpenAI Responses API error:', error);
 			console.error('Model used:', model);
 			throw error;
 		}
