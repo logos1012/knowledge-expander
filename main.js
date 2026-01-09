@@ -47,10 +47,14 @@ var DEFAULT_SETTINGS = {
 };
 var PRICING_PER_MILLION_TOKENS = {
   openai: {
+    "gpt-5.2": { input: 10, output: 30 },
+    "gpt-5.2-pro": { input: 15, output: 60 },
+    "gpt-5-mini": { input: 1.5, output: 6 },
+    "gpt-4.1": { input: 2, output: 8 },
+    "gpt-4.1-mini": { input: 0.4, output: 1.6 },
+    "gpt-4.1-nano": { input: 0.1, output: 0.4 },
     "gpt-4o": { input: 2.5, output: 10 },
-    "gpt-4o-mini": { input: 0.15, output: 0.6 },
-    "gpt-4-turbo": { input: 10, output: 30 },
-    "gpt-3.5-turbo": { input: 0.5, output: 1.5 }
+    "gpt-4o-mini": { input: 0.15, output: 0.6 }
   },
   gemini: {
     "gemini-1.5-flash": { input: 0.075, output: 0.3 },
@@ -558,7 +562,7 @@ var KnowledgeExpanderSettingTab = class extends import_obsidian3.PluginSettingTa
         this.plugin.settings.openaiApiKey = value;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian3.Setting(containerEl).setName("OpenAI Model").setDesc("Select the OpenAI model to use").addDropdown((dropdown) => dropdown.addOption("gpt-4o", "GPT-4o").addOption("gpt-4o-mini", "GPT-4o Mini").addOption("gpt-4-turbo", "GPT-4 Turbo").addOption("gpt-3.5-turbo", "GPT-3.5 Turbo").setValue(this.plugin.settings.openaiModel).onChange(async (value) => {
+      new import_obsidian3.Setting(containerEl).setName("OpenAI Model").setDesc("Select the OpenAI model to use").addDropdown((dropdown) => dropdown.addOption("gpt-5.2", "GPT-5.2").addOption("gpt-5.2-pro", "GPT-5.2 Pro").addOption("gpt-5-mini", "GPT-5 Mini").addOption("gpt-4.1", "GPT-4.1").addOption("gpt-4.1-mini", "GPT-4.1 Mini").addOption("gpt-4.1-nano", "GPT-4.1 Nano").addOption("gpt-4o", "GPT-4o").addOption("gpt-4o-mini", "GPT-4o Mini").setValue(this.plugin.settings.openaiModel).onChange(async (value) => {
         this.plugin.settings.openaiModel = value;
         await this.plugin.saveSettings();
       }));

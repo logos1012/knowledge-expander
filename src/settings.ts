@@ -47,10 +47,14 @@ export class KnowledgeExpanderSettingTab extends PluginSettingTab {
 				.setName('OpenAI Model')
 				.setDesc('Select the OpenAI model to use')
 				.addDropdown(dropdown => dropdown
+					.addOption('gpt-5.2', 'GPT-5.2')
+					.addOption('gpt-5.2-pro', 'GPT-5.2 Pro')
+					.addOption('gpt-5-mini', 'GPT-5 Mini')
+					.addOption('gpt-4.1', 'GPT-4.1')
+					.addOption('gpt-4.1-mini', 'GPT-4.1 Mini')
+					.addOption('gpt-4.1-nano', 'GPT-4.1 Nano')
 					.addOption('gpt-4o', 'GPT-4o')
 					.addOption('gpt-4o-mini', 'GPT-4o Mini')
-					.addOption('gpt-4-turbo', 'GPT-4 Turbo')
-					.addOption('gpt-3.5-turbo', 'GPT-3.5 Turbo')
 					.setValue(this.plugin.settings.openaiModel)
 					.onChange(async (value) => {
 						this.plugin.settings.openaiModel = value;
