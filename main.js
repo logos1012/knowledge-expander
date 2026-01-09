@@ -88,7 +88,10 @@ var AIService = class {
       default:
         throw new Error(`Unknown AI provider: ${this.settings.aiProvider}`);
     }
-    response.content = this.stripMarkdownCodeBlock(response.content);
+    const strippedContent = this.stripMarkdownCodeBlock(response.content);
+    const parsed = this.parseResponse(strippedContent);
+    response.title = parsed.title;
+    response.content = parsed.content;
     return response;
   }
   stripMarkdownCodeBlock(content) {
@@ -108,6 +111,8 @@ var AIService = class {
   buildPrompt(selectedText, context) {
     return `${this.settings.systemPrompt}
 
+\uBC18\uB4DC\uC2DC \uC751\uB2F5\uC758 \uCCAB \uC904\uC5D0 \uC774 \uB0B4\uC6A9\uC744 \uC694\uC57D\uD558\uB294 \uAC04\uACB0\uD55C \uC81C\uBAA9\uC744 \uC791\uC131\uD574\uC8FC\uC138\uC694. \uC81C\uBAA9\uC740 "\uC81C\uBAA9: "\uC73C\uB85C \uC2DC\uC791\uD558\uACE0, 20\uC790 \uC774\uB0B4\uB85C \uC791\uC131\uD569\uB2C8\uB2E4.
+
 ---
 \uC120\uD0DD\uB41C \uD14D\uC2A4\uD2B8:
 "${selectedText}"
@@ -115,6 +120,20 @@ var AIService = class {
 \uC8FC\uBCC0 \uB9E5\uB77D:
 ${context}
 ---`;
+  }
+  parseResponse(rawContent) {
+    const lines = rawContent.trim().split("\n");
+    let title = "";
+    let contentStartIndex = 0;
+    if (lines[0].startsWith("\uC81C\uBAA9:") || lines[0].startsWith("\uC81C\uBAA9 :")) {
+      title = lines[0].replace(/^제목\s*:\s*/, "").trim();
+      contentStartIndex = 1;
+      while (contentStartIndex < lines.length && lines[contentStartIndex].trim() === "") {
+        contentStartIndex++;
+      }
+    }
+    const content = lines.slice(contentStartIndex).join("\n").trim();
+    return { title, content };
   }
   async callOpenAI(prompt) {
     if (!this.settings.openaiApiKey) {
@@ -140,6 +159,7 @@ ${context}
     const content = data.choices[0].message.content;
     const usage = data.usage;
     return {
+      title: "",
       content,
       inputTokens: usage.prompt_tokens,
       outputTokens: usage.completion_tokens,
@@ -171,6 +191,7 @@ ${context}
     const content = data.candidates[0].content.parts[0].text;
     const metadata = data.usageMetadata;
     return {
+      title: "",
       content,
       inputTokens: metadata.promptTokenCount,
       outputTokens: metadata.candidatesTokenCount,
@@ -202,6 +223,7 @@ ${context}
     const content = data.content[0].text;
     const usage = data.usage;
     return {
+      title: "",
       content,
       inputTokens: usage.input_tokens,
       outputTokens: usage.output_tokens,
@@ -353,8 +375,9 @@ var KnowledgeExpanderPlugin = class extends import_obsidian3.Plugin {
       const response = await this.aiService.expandKnowledge(selection, context);
       const now = new Date();
       const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
-      const noteTitle = this.generateNoteTitle(selection);
-      const fileName = `${dateStr}_${noteTitle}`;
+      const noteTitle = response.title || this.generateFallbackTitle(selection);
+      const sanitizedTitle = this.sanitizeFileName(noteTitle);
+      const fileName = `${dateStr}_${sanitizedTitle}`;
       const frontMatter = this.generateFrontMatter(selection, ((_a = view.file) == null ? void 0 : _a.basename) || "Unknown");
       let noteContent = await this.getTemplateContent();
       const aiContent = response.content;
@@ -393,12 +416,15 @@ ${aiContent}`;
     }
     return context;
   }
-  generateNoteTitle(selection) {
+  sanitizeFileName(title) {
     const INVALID_FILENAME_CHARS = /[\\/:*?"<>|]/g;
     const WHITESPACE = /\s+/g;
+    return title.replace(INVALID_FILENAME_CHARS, "").replace(WHITESPACE, " ").trim();
+  }
+  generateFallbackTitle(selection) {
     const MAX_TITLE_LENGTH = 50;
     const MIN_WORD_BOUNDARY = 30;
-    let title = selection.replace(INVALID_FILENAME_CHARS, "").replace(WHITESPACE, " ").trim();
+    let title = this.sanitizeFileName(selection);
     if (title.length > MAX_TITLE_LENGTH) {
       title = title.substring(0, MAX_TITLE_LENGTH).trim();
       const lastSpace = title.lastIndexOf(" ");

@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS: KnowledgeExpanderSettings = {
 };
 
 export interface AIResponse {
+	title: string;
 	content: string;
 	inputTokens: number;
 	outputTokens: number;

@@ -83,8 +83,9 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 			
 			const now = new Date();
 			const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-			const noteTitle = this.generateNoteTitle(selection);
-			const fileName = `${dateStr}_${noteTitle}`;
+			const noteTitle = response.title || this.generateFallbackTitle(selection);
+			const sanitizedTitle = this.sanitizeFileName(noteTitle);
+			const fileName = `${dateStr}_${sanitizedTitle}`;
 
 			const frontMatter = this.generateFrontMatter(selection, view.file?.basename || 'Unknown');
 
@@ -132,16 +133,21 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 		return context;
 	}
 
-	private generateNoteTitle(selection: string): string {
+	private sanitizeFileName(title: string): string {
 		const INVALID_FILENAME_CHARS = /[\\/:*?"<>|]/g;
 		const WHITESPACE = /\s+/g;
-		const MAX_TITLE_LENGTH = 50;
-		const MIN_WORD_BOUNDARY = 30;
 
-		let title = selection
+		return title
 			.replace(INVALID_FILENAME_CHARS, '')
 			.replace(WHITESPACE, ' ')
 			.trim();
+	}
+
+	private generateFallbackTitle(selection: string): string {
+		const MAX_TITLE_LENGTH = 50;
+		const MIN_WORD_BOUNDARY = 30;
+
+		let title = this.sanitizeFileName(selection);
 
 		if (title.length > MAX_TITLE_LENGTH) {
 			title = title.substring(0, MAX_TITLE_LENGTH).trim();

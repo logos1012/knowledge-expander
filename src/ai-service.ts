@@ -30,7 +30,12 @@ export class AIService {
 				throw new Error(`Unknown AI provider: ${this.settings.aiProvider}`);
 		}
 
-		response.content = this.stripMarkdownCodeBlock(response.content);
+		const strippedContent = this.stripMarkdownCodeBlock(response.content);
+		const parsed = this.parseResponse(strippedContent);
+		
+		response.title = parsed.title;
+		response.content = parsed.content;
+		
 		return response;
 	}
 
@@ -55,6 +60,8 @@ export class AIService {
 	private buildPrompt(selectedText: string, context: string): string {
 		return `${this.settings.systemPrompt}
 
+반드시 응답의 첫 줄에 이 내용을 요약하는 간결한 제목을 작성해주세요. 제목은 "제목: "으로 시작하고, 20자 이내로 작성합니다.
+
 ---
 선택된 텍스트:
 "${selectedText}"
@@ -62,6 +69,25 @@ export class AIService {
 주변 맥락:
 ${context}
 ---`;
+	}
+
+	private parseResponse(rawContent: string): { title: string; content: string } {
+		const lines = rawContent.trim().split('\n');
+		let title = '';
+		let contentStartIndex = 0;
+
+		if (lines[0].startsWith('제목:') || lines[0].startsWith('제목 :')) {
+			title = lines[0].replace(/^제목\s*:\s*/, '').trim();
+			contentStartIndex = 1;
+			
+			while (contentStartIndex < lines.length && lines[contentStartIndex].trim() === '') {
+				contentStartIndex++;
+			}
+		}
+
+		const content = lines.slice(contentStartIndex).join('\n').trim();
+		
+		return { title, content };
 	}
 
 	private async callOpenAI(prompt: string): Promise<AIResponse> {
@@ -91,6 +117,7 @@ ${context}
 		const usage = data.usage;
 
 		return {
+			title: '',
 			content,
 			inputTokens: usage.prompt_tokens,
 			outputTokens: usage.completion_tokens,
@@ -126,6 +153,7 @@ ${context}
 		const metadata = data.usageMetadata;
 
 		return {
+			title: '',
 			content,
 			inputTokens: metadata.promptTokenCount,
 			outputTokens: metadata.candidatesTokenCount,
@@ -161,6 +189,7 @@ ${context}
 		const usage = data.usage;
 
 		return {
+			title: '',
 			content,
 			inputTokens: usage.input_tokens,
 			outputTokens: usage.output_tokens,
