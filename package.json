@@ -1,6 +1,6 @@
 {
 	"name": "knowledge-expander",
-	"version": "1.2.0",
+	"version": "1.3.0",
 	"description": "Obsidian plugin to expand knowledge by generating AI-powered explanations for selected text",
 	"main": "main.js",
 	"scripts": {

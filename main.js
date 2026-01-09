@@ -274,7 +274,30 @@ var KeywordExtractor = class {
       "\uC774\uB2E4",
       "\uC544\uB2C8\uB2E4",
       "\uD558\uACE0",
-      "\uD55C\uB2E4"
+      "\uD55C\uB2E4",
+      "\uC774\uB294",
+      "\uC774\uD558",
+      "\uB530\uB77C",
+      "\uD1B5\uD574",
+      "\uC704\uD55C",
+      "\uB300\uD55C",
+      "\uAD00\uD55C",
+      "\uB54C\uBB38",
+      "\uACBD\uC6B0",
+      "\uC774\uD6C4",
+      "\uB2E4\uB978",
+      "\uC5EC\uB7EC",
+      "\uAC19\uC740",
+      "\uB2E4\uC591\uD55C",
+      "\uC911\uC694\uD55C",
+      "\uD544\uC694\uD55C",
+      "\uAC00\uB2A5\uD55C",
+      "\uC9C1\uC811\uC801\uC778",
+      "\uC7A5\uAE30\uC801\uC778",
+      "\uBC30\uACBD\uC9C0\uC2DD",
+      "\uACB0\uB860",
+      "\uB9E5\uB77D",
+      "\uAD00\uACC4"
     ]);
     this.stopwordsEn = /* @__PURE__ */ new Set([
       "the",
@@ -303,10 +326,8 @@ var KeywordExtractor = class {
       "has",
       "had"
     ]);
+    this.suffixPattern = /(?:은|는|이|가|을|를|의|에|에서|으로|로|와|과|도|만|부터|까지|처럼|같이|보다|라고|라는|이라|라며|에도|에는|으로는|에서는|이나|나|든지|든가|이란|란|이면|면|하면|다면|라면|해서|해도|하는|하고|하며|해야|입니다|합니다|됩니다|습니다|ㅂ니다|니다)$/;
   }
-  /**
-   * Extract keywords from text and title
-   */
   extractKeywords(text, title = "") {
     const keywords = [];
     if (title) {
@@ -323,27 +344,34 @@ var KeywordExtractor = class {
     const topKeywords = this.getTopKeywords(keywordFreq, this.maxTags);
     return topKeywords;
   }
-  /**
-   * Extract general keywords (Korean and English)
-   */
   extractGeneralKeywords(text) {
     const keywords = [];
     const koPattern = /[가-힣]{2,}/g;
     const koMatches = text.match(koPattern) || [];
-    const koFiltered = koMatches.filter((w) => !this.stopwordsKo.has(w));
-    keywords.push(...koFiltered);
+    for (const word of koMatches) {
+      const cleaned = this.cleanKoreanWord(word);
+      if (cleaned.length >= 2 && !this.stopwordsKo.has(cleaned)) {
+        keywords.push(cleaned);
+      }
+    }
     const enPattern = /\b[A-Z][a-zA-Z]{2,}\b|\b[A-Z]{2,}\b/g;
     const enMatches = text.match(enPattern) || [];
     const enFiltered = enMatches.filter((w) => !this.stopwordsEn.has(w.toLowerCase()));
     keywords.push(...enFiltered);
     return keywords;
   }
-  /**
-   * Extract proper nouns (company names, acronyms, etc.)
-   */
+  cleanKoreanWord(word) {
+    let cleaned = word;
+    let prevLength = 0;
+    while (cleaned.length !== prevLength && cleaned.length >= 2) {
+      prevLength = cleaned.length;
+      cleaned = cleaned.replace(this.suffixPattern, "");
+    }
+    return cleaned;
+  }
   extractProperNouns(text) {
     const properNouns = [];
-    const companyPattern = /(?:주식회사|㈜)?\s*([가-힣A-Za-z]+(?:\s+[가-힣A-Za-z]+)?)/g;
+    const companyPattern = /(?:주식회사|㈜)\s*([가-힣A-Za-z]+(?:\s+[가-힣A-Za-z]+)?)/g;
     let match;
     while ((match = companyPattern.exec(text)) !== null) {
       const company = match[1].trim();
@@ -359,9 +387,6 @@ var KeywordExtractor = class {
     properNouns.push(...acronymMatches);
     return properNouns.map((pn) => pn.trim()).filter((pn) => pn.length > 0);
   }
-  /**
-   * Extract important numbers (amounts, dates)
-   */
   extractNumbers(text) {
     const numbers = [];
     const moneyPattern = /\d+(?:조|억|만)?원/g;
@@ -375,9 +400,6 @@ var KeywordExtractor = class {
     numbers.push(...largeNumMatches);
     return numbers;
   }
-  /**
-   * Count keyword frequency
-   */
   countFrequency(keywords) {
     const freq = {};
     for (const keyword of keywords) {
@@ -385,9 +407,6 @@ var KeywordExtractor = class {
     }
     return freq;
   }
-  /**
-   * Get top N keywords by frequency
-   */
   getTopKeywords(freq, topN) {
     const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]).map(([keyword]) => keyword).slice(0, topN);
     return sorted;
