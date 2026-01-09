@@ -184,7 +184,7 @@ ${context}${questionSection}
 				'Authorization': `Bearer ${this.settings.openaiApiKey}`,
 			},
 			body: JSON.stringify({
-				model: 'gpt-4o',
+				model: this.settings.openaiWebSearchModel,
 				tools: [{ type: 'web_search_preview' }],
 				input: prompt,
 			}),
@@ -215,7 +215,7 @@ ${context}${questionSection}
 			inputTokens,
 			outputTokens,
 			totalTokens: inputTokens + outputTokens,
-			estimatedCost: this.calculateCost('openai', 'gpt-4o', inputTokens, outputTokens),
+			estimatedCost: this.calculateCost('openai', this.settings.openaiWebSearchModel, inputTokens, outputTokens),
 		};
 	}
 

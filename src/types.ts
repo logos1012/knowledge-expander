@@ -4,6 +4,7 @@ export interface KnowledgeExpanderSettings {
 	aiProvider: AIProvider;
 	openaiApiKey: string;
 	openaiModel: string;
+	openaiWebSearchModel: string;
 	geminiApiKey: string;
 	geminiModel: string;
 	claudeApiKey: string;
@@ -17,6 +18,7 @@ export const DEFAULT_SETTINGS: KnowledgeExpanderSettings = {
 	aiProvider: 'openai',
 	openaiApiKey: '',
 	openaiModel: 'gpt-4o',
+	openaiWebSearchModel: 'gpt-4o-mini',
 	geminiApiKey: '',
 	geminiModel: 'gemini-1.5-flash',
 	claudeApiKey: '',

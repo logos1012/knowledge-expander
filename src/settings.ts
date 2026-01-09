@@ -1,5 +1,49 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import KnowledgeExpanderPlugin from './main';
+import { PRICING_PER_MILLION_TOKENS } from './types';
+
+type OpenAIModel = keyof typeof PRICING_PER_MILLION_TOKENS.openai;
+type GeminiModel = keyof typeof PRICING_PER_MILLION_TOKENS.gemini;
+type ClaudeModel = keyof typeof PRICING_PER_MILLION_TOKENS.claude;
+
+function formatCost(input: number, output: number): string {
+	return `$${input}/${output} per 1M tokens`;
+}
+
+function getOpenAIModelLabel(model: OpenAIModel): string {
+	const pricing = PRICING_PER_MILLION_TOKENS.openai[model];
+	const labels: Record<OpenAIModel, string> = {
+		'gpt-5.2': 'GPT-5.2',
+		'gpt-5.2-pro': 'GPT-5.2 Pro',
+		'gpt-5-mini': 'GPT-5 Mini',
+		'gpt-4.1': 'GPT-4.1',
+		'gpt-4.1-mini': 'GPT-4.1 Mini',
+		'gpt-4.1-nano': 'GPT-4.1 Nano',
+		'gpt-4o': 'GPT-4o',
+		'gpt-4o-mini': 'GPT-4o Mini',
+	};
+	return `${labels[model]} (${formatCost(pricing.input, pricing.output)})`;
+}
+
+function getGeminiModelLabel(model: GeminiModel): string {
+	const pricing = PRICING_PER_MILLION_TOKENS.gemini[model];
+	const labels: Record<GeminiModel, string> = {
+		'gemini-1.5-flash': 'Gemini 1.5 Flash',
+		'gemini-1.5-pro': 'Gemini 1.5 Pro',
+		'gemini-2.0-flash': 'Gemini 2.0 Flash',
+	};
+	return `${labels[model]} (${formatCost(pricing.input, pricing.output)})`;
+}
+
+function getClaudeModelLabel(model: ClaudeModel): string {
+	const pricing = PRICING_PER_MILLION_TOKENS.claude[model];
+	const labels: Record<ClaudeModel, string> = {
+		'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
+		'claude-3-opus-20240229': 'Claude 3 Opus',
+		'claude-3-haiku-20240307': 'Claude 3 Haiku',
+	};
+	return `${labels[model]} (${formatCost(pricing.input, pricing.output)})`;
+}
 
 export class KnowledgeExpanderSettingTab extends PluginSettingTab {
 	plugin: KnowledgeExpanderPlugin;
@@ -44,22 +88,34 @@ export class KnowledgeExpanderSettingTab extends PluginSettingTab {
 					}));
 
 			new Setting(containerEl)
-				.setName('OpenAI Model')
-				.setDesc('Select the OpenAI model to use')
-				.addDropdown(dropdown => dropdown
-					.addOption('gpt-5.2', 'GPT-5.2')
-					.addOption('gpt-5.2-pro', 'GPT-5.2 Pro')
-					.addOption('gpt-5-mini', 'GPT-5 Mini')
-					.addOption('gpt-4.1', 'GPT-4.1')
-					.addOption('gpt-4.1-mini', 'GPT-4.1 Mini')
-					.addOption('gpt-4.1-nano', 'GPT-4.1 Nano')
-					.addOption('gpt-4o', 'GPT-4o')
-					.addOption('gpt-4o-mini', 'GPT-4o Mini')
-					.setValue(this.plugin.settings.openaiModel)
-					.onChange(async (value) => {
-						this.plugin.settings.openaiModel = value;
-						await this.plugin.saveSettings();
-					}));
+				.setName('OpenAI Model (Expand Knowledge)')
+				.setDesc('Model for knowledge expansion. Cost shown as input/output per 1M tokens.')
+				.addDropdown(dropdown => {
+					const models: OpenAIModel[] = ['gpt-5.2', 'gpt-5.2-pro', 'gpt-5-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini'];
+					models.forEach(model => {
+						dropdown.addOption(model, getOpenAIModelLabel(model));
+					});
+					dropdown.setValue(this.plugin.settings.openaiModel)
+						.onChange(async (value) => {
+							this.plugin.settings.openaiModel = value;
+							await this.plugin.saveSettings();
+						});
+				});
+
+			new Setting(containerEl)
+				.setName('OpenAI Model (Web Search)')
+				.setDesc('Model for web search. Cost shown as input/output per 1M tokens.')
+				.addDropdown(dropdown => {
+					const models: OpenAIModel[] = ['gpt-5.2', 'gpt-5.2-pro', 'gpt-5-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini'];
+					models.forEach(model => {
+						dropdown.addOption(model, getOpenAIModelLabel(model));
+					});
+					dropdown.setValue(this.plugin.settings.openaiWebSearchModel)
+						.onChange(async (value) => {
+							this.plugin.settings.openaiWebSearchModel = value;
+							await this.plugin.saveSettings();
+						});
+				});
 		}
 
 		if (this.plugin.settings.aiProvider === 'gemini') {
@@ -78,16 +134,18 @@ export class KnowledgeExpanderSettingTab extends PluginSettingTab {
 
 			new Setting(containerEl)
 				.setName('Gemini Model')
-				.setDesc('Select the Gemini model to use')
-				.addDropdown(dropdown => dropdown
-					.addOption('gemini-1.5-flash', 'Gemini 1.5 Flash')
-					.addOption('gemini-1.5-pro', 'Gemini 1.5 Pro')
-					.addOption('gemini-2.0-flash', 'Gemini 2.0 Flash')
-					.setValue(this.plugin.settings.geminiModel)
-					.onChange(async (value) => {
-						this.plugin.settings.geminiModel = value;
-						await this.plugin.saveSettings();
-					}));
+				.setDesc('Model for knowledge expansion. Cost shown as input/output per 1M tokens.')
+				.addDropdown(dropdown => {
+					const models: GeminiModel[] = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'];
+					models.forEach(model => {
+						dropdown.addOption(model, getGeminiModelLabel(model));
+					});
+					dropdown.setValue(this.plugin.settings.geminiModel)
+						.onChange(async (value) => {
+							this.plugin.settings.geminiModel = value;
+							await this.plugin.saveSettings();
+						});
+				});
 		}
 
 		if (this.plugin.settings.aiProvider === 'claude') {
@@ -106,16 +164,18 @@ export class KnowledgeExpanderSettingTab extends PluginSettingTab {
 
 			new Setting(containerEl)
 				.setName('Claude Model')
-				.setDesc('Select the Claude model to use')
-				.addDropdown(dropdown => dropdown
-					.addOption('claude-3-5-sonnet-20241022', 'Claude 3.5 Sonnet')
-					.addOption('claude-3-opus-20240229', 'Claude 3 Opus')
-					.addOption('claude-3-haiku-20240307', 'Claude 3 Haiku')
-					.setValue(this.plugin.settings.claudeModel)
-					.onChange(async (value) => {
-						this.plugin.settings.claudeModel = value;
-						await this.plugin.saveSettings();
-					}));
+				.setDesc('Model for knowledge expansion. Cost shown as input/output per 1M tokens.')
+				.addDropdown(dropdown => {
+					const models: ClaudeModel[] = ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'];
+					models.forEach(model => {
+						dropdown.addOption(model, getClaudeModelLabel(model));
+					});
+					dropdown.setValue(this.plugin.settings.claudeModel)
+						.onChange(async (value) => {
+							this.plugin.settings.claudeModel = value;
+							await this.plugin.saveSettings();
+						});
+				});
 		}
 
 		containerEl.createEl('h3', { text: 'Note Settings' });

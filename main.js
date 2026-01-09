@@ -37,6 +37,7 @@ var DEFAULT_SETTINGS = {
   aiProvider: "openai",
   openaiApiKey: "",
   openaiModel: "gpt-4o",
+  openaiWebSearchModel: "gpt-4o-mini",
   geminiApiKey: "",
   geminiModel: "gemini-1.5-flash",
   claudeApiKey: "",
@@ -226,7 +227,7 @@ ${context}${questionSection}
         "Authorization": `Bearer ${this.settings.openaiApiKey}`
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: this.settings.openaiWebSearchModel,
         tools: [{ type: "web_search_preview" }],
         input: prompt
       })
@@ -253,7 +254,7 @@ ${context}${questionSection}
       inputTokens,
       outputTokens,
       totalTokens: inputTokens + outputTokens,
-      estimatedCost: this.calculateCost("openai", "gpt-4o", inputTokens, outputTokens)
+      estimatedCost: this.calculateCost("openai", this.settings.openaiWebSearchModel, inputTokens, outputTokens)
     };
   }
   async callGemini(prompt) {
@@ -542,6 +543,41 @@ var KeywordExtractor = class {
 
 // src/settings.ts
 var import_obsidian3 = require("obsidian");
+function formatCost(input, output) {
+  return `$${input}/${output} per 1M tokens`;
+}
+function getOpenAIModelLabel(model) {
+  const pricing = PRICING_PER_MILLION_TOKENS.openai[model];
+  const labels = {
+    "gpt-5.2": "GPT-5.2",
+    "gpt-5.2-pro": "GPT-5.2 Pro",
+    "gpt-5-mini": "GPT-5 Mini",
+    "gpt-4.1": "GPT-4.1",
+    "gpt-4.1-mini": "GPT-4.1 Mini",
+    "gpt-4.1-nano": "GPT-4.1 Nano",
+    "gpt-4o": "GPT-4o",
+    "gpt-4o-mini": "GPT-4o Mini"
+  };
+  return `${labels[model]} (${formatCost(pricing.input, pricing.output)})`;
+}
+function getGeminiModelLabel(model) {
+  const pricing = PRICING_PER_MILLION_TOKENS.gemini[model];
+  const labels = {
+    "gemini-1.5-flash": "Gemini 1.5 Flash",
+    "gemini-1.5-pro": "Gemini 1.5 Pro",
+    "gemini-2.0-flash": "Gemini 2.0 Flash"
+  };
+  return `${labels[model]} (${formatCost(pricing.input, pricing.output)})`;
+}
+function getClaudeModelLabel(model) {
+  const pricing = PRICING_PER_MILLION_TOKENS.claude[model];
+  const labels = {
+    "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
+    "claude-3-opus-20240229": "Claude 3 Opus",
+    "claude-3-haiku-20240307": "Claude 3 Haiku"
+  };
+  return `${labels[model]} (${formatCost(pricing.input, pricing.output)})`;
+}
 var KnowledgeExpanderSettingTab = class extends import_obsidian3.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -562,10 +598,26 @@ var KnowledgeExpanderSettingTab = class extends import_obsidian3.PluginSettingTa
         this.plugin.settings.openaiApiKey = value;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian3.Setting(containerEl).setName("OpenAI Model").setDesc("Select the OpenAI model to use").addDropdown((dropdown) => dropdown.addOption("gpt-5.2", "GPT-5.2").addOption("gpt-5.2-pro", "GPT-5.2 Pro").addOption("gpt-5-mini", "GPT-5 Mini").addOption("gpt-4.1", "GPT-4.1").addOption("gpt-4.1-mini", "GPT-4.1 Mini").addOption("gpt-4.1-nano", "GPT-4.1 Nano").addOption("gpt-4o", "GPT-4o").addOption("gpt-4o-mini", "GPT-4o Mini").setValue(this.plugin.settings.openaiModel).onChange(async (value) => {
-        this.plugin.settings.openaiModel = value;
-        await this.plugin.saveSettings();
-      }));
+      new import_obsidian3.Setting(containerEl).setName("OpenAI Model (Expand Knowledge)").setDesc("Model for knowledge expansion. Cost shown as input/output per 1M tokens.").addDropdown((dropdown) => {
+        const models = ["gpt-5.2", "gpt-5.2-pro", "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini"];
+        models.forEach((model) => {
+          dropdown.addOption(model, getOpenAIModelLabel(model));
+        });
+        dropdown.setValue(this.plugin.settings.openaiModel).onChange(async (value) => {
+          this.plugin.settings.openaiModel = value;
+          await this.plugin.saveSettings();
+        });
+      });
+      new import_obsidian3.Setting(containerEl).setName("OpenAI Model (Web Search)").setDesc("Model for web search. Cost shown as input/output per 1M tokens.").addDropdown((dropdown) => {
+        const models = ["gpt-5.2", "gpt-5.2-pro", "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini"];
+        models.forEach((model) => {
+          dropdown.addOption(model, getOpenAIModelLabel(model));
+        });
+        dropdown.setValue(this.plugin.settings.openaiWebSearchModel).onChange(async (value) => {
+          this.plugin.settings.openaiWebSearchModel = value;
+          await this.plugin.saveSettings();
+        });
+      });
     }
     if (this.plugin.settings.aiProvider === "gemini") {
       containerEl.createEl("h3", { text: "Google Gemini Settings" });
@@ -573,10 +625,16 @@ var KnowledgeExpanderSettingTab = class extends import_obsidian3.PluginSettingTa
         this.plugin.settings.geminiApiKey = value;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian3.Setting(containerEl).setName("Gemini Model").setDesc("Select the Gemini model to use").addDropdown((dropdown) => dropdown.addOption("gemini-1.5-flash", "Gemini 1.5 Flash").addOption("gemini-1.5-pro", "Gemini 1.5 Pro").addOption("gemini-2.0-flash", "Gemini 2.0 Flash").setValue(this.plugin.settings.geminiModel).onChange(async (value) => {
-        this.plugin.settings.geminiModel = value;
-        await this.plugin.saveSettings();
-      }));
+      new import_obsidian3.Setting(containerEl).setName("Gemini Model").setDesc("Model for knowledge expansion. Cost shown as input/output per 1M tokens.").addDropdown((dropdown) => {
+        const models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"];
+        models.forEach((model) => {
+          dropdown.addOption(model, getGeminiModelLabel(model));
+        });
+        dropdown.setValue(this.plugin.settings.geminiModel).onChange(async (value) => {
+          this.plugin.settings.geminiModel = value;
+          await this.plugin.saveSettings();
+        });
+      });
     }
     if (this.plugin.settings.aiProvider === "claude") {
       containerEl.createEl("h3", { text: "Anthropic Claude Settings" });
@@ -584,10 +642,16 @@ var KnowledgeExpanderSettingTab = class extends import_obsidian3.PluginSettingTa
         this.plugin.settings.claudeApiKey = value;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian3.Setting(containerEl).setName("Claude Model").setDesc("Select the Claude model to use").addDropdown((dropdown) => dropdown.addOption("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet").addOption("claude-3-opus-20240229", "Claude 3 Opus").addOption("claude-3-haiku-20240307", "Claude 3 Haiku").setValue(this.plugin.settings.claudeModel).onChange(async (value) => {
-        this.plugin.settings.claudeModel = value;
-        await this.plugin.saveSettings();
-      }));
+      new import_obsidian3.Setting(containerEl).setName("Claude Model").setDesc("Model for knowledge expansion. Cost shown as input/output per 1M tokens.").addDropdown((dropdown) => {
+        const models = ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"];
+        models.forEach((model) => {
+          dropdown.addOption(model, getClaudeModelLabel(model));
+        });
+        dropdown.setValue(this.plugin.settings.claudeModel).onChange(async (value) => {
+          this.plugin.settings.claudeModel = value;
+          await this.plugin.saveSettings();
+        });
+      });
     }
     containerEl.createEl("h3", { text: "Note Settings" });
     new import_obsidian3.Setting(containerEl).setName("Note Folder Path").setDesc("Folder path where expanded knowledge notes will be saved. Leave empty to use the default new note location.").addText((text) => text.setPlaceholder("folder/subfolder").setValue(this.plugin.settings.notePath).onChange(async (value) => {
