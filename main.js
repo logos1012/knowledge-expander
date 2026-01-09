@@ -243,6 +243,157 @@ ${context}
   }
 };
 
+// src/keyword-extractor.ts
+var KeywordExtractor = class {
+  constructor(maxTags = 20) {
+    this.maxTags = maxTags;
+    this.stopwordsKo = /* @__PURE__ */ new Set([
+      "\uC774",
+      "\uADF8",
+      "\uC800",
+      "\uAC83",
+      "\uC218",
+      "\uB4F1",
+      "\uBC0F",
+      "\uC758",
+      "\uAC00",
+      "\uC744",
+      "\uB97C",
+      "\uC5D0",
+      "\uC5D0\uC11C",
+      "\uC73C\uB85C",
+      "\uB85C",
+      "\uC640",
+      "\uACFC",
+      "\uB3C4",
+      "\uB9CC",
+      "\uD558\uB2E4",
+      "\uC788\uB2E4",
+      "\uC5C6\uB2E4",
+      "\uB418\uB2E4",
+      "\uC774\uB2E4",
+      "\uC544\uB2C8\uB2E4",
+      "\uD558\uACE0",
+      "\uD55C\uB2E4"
+    ]);
+    this.stopwordsEn = /* @__PURE__ */ new Set([
+      "the",
+      "a",
+      "an",
+      "and",
+      "or",
+      "but",
+      "in",
+      "on",
+      "at",
+      "to",
+      "for",
+      "of",
+      "with",
+      "by",
+      "from",
+      "is",
+      "was",
+      "are",
+      "were",
+      "be",
+      "been",
+      "being",
+      "have",
+      "has",
+      "had"
+    ]);
+  }
+  /**
+   * Extract keywords from text and title
+   */
+  extractKeywords(text, title = "") {
+    const keywords = [];
+    if (title) {
+      const titleKeywords = this.extractGeneralKeywords(title);
+      keywords.push(...titleKeywords, ...titleKeywords, ...titleKeywords);
+    }
+    const properNouns = this.extractProperNouns(text);
+    keywords.push(...properNouns, ...properNouns);
+    const bodyKeywords = this.extractGeneralKeywords(text);
+    keywords.push(...bodyKeywords);
+    const numbers = this.extractNumbers(text);
+    keywords.push(...numbers);
+    const keywordFreq = this.countFrequency(keywords);
+    const topKeywords = this.getTopKeywords(keywordFreq, this.maxTags);
+    return topKeywords;
+  }
+  /**
+   * Extract general keywords (Korean and English)
+   */
+  extractGeneralKeywords(text) {
+    const keywords = [];
+    const koPattern = /[가-힣]{2,}/g;
+    const koMatches = text.match(koPattern) || [];
+    const koFiltered = koMatches.filter((w) => !this.stopwordsKo.has(w));
+    keywords.push(...koFiltered);
+    const enPattern = /\b[A-Z][a-zA-Z]{2,}\b|\b[A-Z]{2,}\b/g;
+    const enMatches = text.match(enPattern) || [];
+    const enFiltered = enMatches.filter((w) => !this.stopwordsEn.has(w.toLowerCase()));
+    keywords.push(...enFiltered);
+    return keywords;
+  }
+  /**
+   * Extract proper nouns (company names, acronyms, etc.)
+   */
+  extractProperNouns(text) {
+    const properNouns = [];
+    const companyPattern = /(?:주식회사|㈜)?\s*([가-힣A-Za-z]+(?:\s+[가-힣A-Za-z]+)?)/g;
+    let match;
+    while ((match = companyPattern.exec(text)) !== null) {
+      const company = match[1].trim();
+      if (company.length >= 2) {
+        properNouns.push(company);
+      }
+    }
+    const capitalizedPattern = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g;
+    const capitalizedMatches = text.match(capitalizedPattern) || [];
+    properNouns.push(...capitalizedMatches);
+    const acronymPattern = /\b[A-Z]{2,}\b/g;
+    const acronymMatches = text.match(acronymPattern) || [];
+    properNouns.push(...acronymMatches);
+    return properNouns.map((pn) => pn.trim()).filter((pn) => pn.length > 0);
+  }
+  /**
+   * Extract important numbers (amounts, dates)
+   */
+  extractNumbers(text) {
+    const numbers = [];
+    const moneyPattern = /\d+(?:조|억|만)?원/g;
+    const moneyMatches = text.match(moneyPattern) || [];
+    numbers.push(...moneyMatches);
+    const datePattern = /\d{4}년|\d{1,2}월\d{1,2}일/g;
+    const dateMatches = text.match(datePattern) || [];
+    numbers.push(...dateMatches);
+    const largeNumPattern = /\d+(?:,\d{3})*(?:명|건|회|개)/g;
+    const largeNumMatches = text.match(largeNumPattern) || [];
+    numbers.push(...largeNumMatches);
+    return numbers;
+  }
+  /**
+   * Count keyword frequency
+   */
+  countFrequency(keywords) {
+    const freq = {};
+    for (const keyword of keywords) {
+      freq[keyword] = (freq[keyword] || 0) + 1;
+    }
+    return freq;
+  }
+  /**
+   * Get top N keywords by frequency
+   */
+  getTopKeywords(freq, topN) {
+    const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]).map(([keyword]) => keyword).slice(0, topN);
+    return sorted;
+  }
+};
+
 // src/settings.ts
 var import_obsidian2 = require("obsidian");
 var KnowledgeExpanderSettingTab = class extends import_obsidian2.PluginSettingTab {
@@ -318,6 +469,7 @@ var KnowledgeExpanderPlugin = class extends import_obsidian3.Plugin {
   async onload() {
     await this.loadSettings();
     this.aiService = new AIService(this.settings);
+    this.keywordExtractor = new KeywordExtractor(10);
     this.addRibbonIcon("lightbulb", "Expand Knowledge", () => {
       this.expandSelectedText();
     });
@@ -378,7 +530,7 @@ var KnowledgeExpanderPlugin = class extends import_obsidian3.Plugin {
       const noteTitle = response.title || this.generateFallbackTitle(selection);
       const sanitizedTitle = this.sanitizeFileName(noteTitle);
       const fileName = `${dateStr}_${sanitizedTitle}`;
-      const frontMatter = this.generateFrontMatter(selection, ((_a = view.file) == null ? void 0 : _a.basename) || "Unknown");
+      const frontMatter = this.generateFrontMatter(selection, ((_a = view.file) == null ? void 0 : _a.basename) || "Unknown", response.content);
       let noteContent = await this.getTemplateContent();
       const aiContent = response.content;
       if (noteContent) {
@@ -434,19 +586,23 @@ ${aiContent}`;
     }
     return title || "Expanded Knowledge";
   }
-  generateFrontMatter(selectedText, sourceNote) {
+  generateFrontMatter(selectedText, sourceNote, aiContent) {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10);
     const timeStr = now.toISOString().slice(11, 19);
+    const combinedText = `${selectedText}
+${aiContent}`;
+    const extractedTags = this.keywordExtractor.extractKeywords(combinedText, selectedText);
+    const baseTags = ["knowledge-expansion", "ai-generated"];
+    const allTags = [...baseTags, ...extractedTags];
+    const tagsYaml = allTags.map((t) => `  - ${t}`).join("\n");
     return `---
 type: knowledge-expansion
 source: "[[${sourceNote}]]"
 original_text: "${selectedText.replace(/"/g, '\\"').substring(0, 200)}"
 created: ${dateStr}T${timeStr}
 tags:
-  - knowledge
-  - expanded
-  - ai-generated
+${tagsYaml}
 aliases: []
 related: []
 ---`;

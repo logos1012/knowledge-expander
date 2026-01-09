@@ -1,16 +1,19 @@
 import { Editor, MarkdownView, Menu, Notice, Plugin, TFile } from 'obsidian';
 import { AIService } from './ai-service';
+import { KeywordExtractor } from './keyword-extractor';
 import { KnowledgeExpanderSettingTab } from './settings';
 import { DEFAULT_SETTINGS, KnowledgeExpanderSettings } from './types';
 
 export default class KnowledgeExpanderPlugin extends Plugin {
 	settings: KnowledgeExpanderSettings;
 	aiService: AIService;
+	keywordExtractor: KeywordExtractor;
 
 	async onload() {
 		await this.loadSettings();
 
 		this.aiService = new AIService(this.settings);
+		this.keywordExtractor = new KeywordExtractor(10);
 
 		this.addRibbonIcon('lightbulb', 'Expand Knowledge', () => {
 			this.expandSelectedText();
@@ -87,7 +90,7 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 			const sanitizedTitle = this.sanitizeFileName(noteTitle);
 			const fileName = `${dateStr}_${sanitizedTitle}`;
 
-			const frontMatter = this.generateFrontMatter(selection, view.file?.basename || 'Unknown');
+			const frontMatter = this.generateFrontMatter(selection, view.file?.basename || 'Unknown', response.content);
 
 			let noteContent = await this.getTemplateContent();
 			
@@ -160,10 +163,17 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 		return title || 'Expanded Knowledge';
 	}
 
-	private generateFrontMatter(selectedText: string, sourceNote: string): string {
+	private generateFrontMatter(selectedText: string, sourceNote: string, aiContent: string): string {
 		const now = new Date();
 		const dateStr = now.toISOString().slice(0, 10);
 		const timeStr = now.toISOString().slice(11, 19);
+
+		const combinedText = `${selectedText}\n${aiContent}`;
+		const extractedTags = this.keywordExtractor.extractKeywords(combinedText, selectedText);
+		
+		const baseTags = ['knowledge-expansion', 'ai-generated'];
+		const allTags = [...baseTags, ...extractedTags];
+		const tagsYaml = allTags.map(t => `  - ${t}`).join('\n');
 
 		return `---
 type: knowledge-expansion
@@ -171,9 +181,7 @@ source: "[[${sourceNote}]]"
 original_text: "${selectedText.replace(/"/g, '\\"').substring(0, 200)}"
 created: ${dateStr}T${timeStr}
 tags:
-  - knowledge
-  - expanded
-  - ai-generated
+${tagsYaml}
 aliases: []
 related: []
 ---`;
