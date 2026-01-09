@@ -39,14 +39,14 @@ export interface AIResponse {
 
 export const PRICING_PER_MILLION_TOKENS = {
 	openai: {
-		'gpt-5.2': { input: 10.00, output: 30.00 },
-		'gpt-5.2-pro': { input: 15.00, output: 60.00 },
-		'gpt-5-mini': { input: 1.50, output: 6.00 },
-		'gpt-4.1': { input: 2.00, output: 8.00 },
-		'gpt-4.1-mini': { input: 0.40, output: 1.60 },
-		'gpt-4.1-nano': { input: 0.10, output: 0.40 },
 		'gpt-4o': { input: 2.50, output: 10.00 },
 		'gpt-4o-mini': { input: 0.15, output: 0.60 },
+		'gpt-4-turbo': { input: 10.00, output: 30.00 },
+		'gpt-4': { input: 30.00, output: 60.00 },
+		'gpt-3.5-turbo': { input: 0.50, output: 1.50 },
+		'o1': { input: 15.00, output: 60.00 },
+		'o1-mini': { input: 3.00, output: 12.00 },
+		'o1-preview': { input: 15.00, output: 60.00 },
 	},
 	gemini: {
 		'gemini-1.5-flash': { input: 0.075, output: 0.30 },

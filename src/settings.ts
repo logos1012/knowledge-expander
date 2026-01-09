@@ -13,14 +13,14 @@ function formatCost(input: number, output: number): string {
 function getOpenAIModelLabel(model: OpenAIModel): string {
 	const pricing = PRICING_PER_MILLION_TOKENS.openai[model];
 	const labels: Record<OpenAIModel, string> = {
-		'gpt-5.2': 'GPT-5.2',
-		'gpt-5.2-pro': 'GPT-5.2 Pro',
-		'gpt-5-mini': 'GPT-5 Mini',
-		'gpt-4.1': 'GPT-4.1',
-		'gpt-4.1-mini': 'GPT-4.1 Mini',
-		'gpt-4.1-nano': 'GPT-4.1 Nano',
 		'gpt-4o': 'GPT-4o',
 		'gpt-4o-mini': 'GPT-4o Mini',
+		'gpt-4-turbo': 'GPT-4 Turbo',
+		'gpt-4': 'GPT-4',
+		'gpt-3.5-turbo': 'GPT-3.5 Turbo',
+		'o1': 'o1 (Reasoning)',
+		'o1-mini': 'o1 Mini',
+		'o1-preview': 'o1 Preview',
 	};
 	return `${labels[model]} (${formatCost(pricing.input, pricing.output)})`;
 }
@@ -91,7 +91,7 @@ export class KnowledgeExpanderSettingTab extends PluginSettingTab {
 				.setName('OpenAI Model (Expand Knowledge)')
 				.setDesc('Model for knowledge expansion. Cost shown as input/output per 1M tokens.')
 				.addDropdown(dropdown => {
-					const models: OpenAIModel[] = ['gpt-5.2', 'gpt-5.2-pro', 'gpt-5-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini'];
+					const models: OpenAIModel[] = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'o1', 'o1-mini', 'o1-preview'];
 					models.forEach(model => {
 						dropdown.addOption(model, getOpenAIModelLabel(model));
 					});
@@ -106,7 +106,7 @@ export class KnowledgeExpanderSettingTab extends PluginSettingTab {
 				.setName('OpenAI Model (Web Search)')
 				.setDesc('Model for web search. Cost shown as input/output per 1M tokens.')
 				.addDropdown(dropdown => {
-					const models: OpenAIModel[] = ['gpt-5.2', 'gpt-5.2-pro', 'gpt-5-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini'];
+					const models: OpenAIModel[] = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'o1', 'o1-mini', 'o1-preview'];
 					models.forEach(model => {
 						dropdown.addOption(model, getOpenAIModelLabel(model));
 					});
