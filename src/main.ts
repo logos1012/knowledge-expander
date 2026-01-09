@@ -1,9 +1,18 @@
-import { Editor, MarkdownView, Menu, Notice, Plugin, TFile } from 'obsidian';
+import { Editor, EditorPosition, MarkdownView, Menu, Notice, Plugin, TFile } from 'obsidian';
 import { AIService } from './ai-service';
 import { InputPromptModal } from './input-modal';
 import { KeywordExtractor } from './keyword-extractor';
 import { KnowledgeExpanderSettingTab } from './settings';
 import { DEFAULT_SETTINGS, KnowledgeExpanderSettings } from './types';
+
+interface SelectionContext {
+	filePath: string;
+	from: EditorPosition;
+	to: EditorPosition;
+	selectedText: string;
+	surroundingContext: string;
+	sourceNoteName: string;
+}
 
 export default class KnowledgeExpanderPlugin extends Plugin {
 	settings: KnowledgeExpanderSettings;
@@ -124,26 +133,32 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 	}
 
 	private async expandSelectedTextFromEditor(editor: Editor, view: MarkdownView, userQuestion: string = '') {
-		const selection = editor.getSelection();
-		if (!selection) {
+		const selectionCtx = this.captureSelectionContext(editor, view);
+		if (!selectionCtx) {
 			new Notice('Please select some text to expand');
 			return;
 		}
 
-		const context = this.getSurroundingContext(editor);
-
 		new Notice('Expanding knowledge... Please wait.');
 
 		try {
-			const response = await this.aiService.expandKnowledge(selection, context, userQuestion);
+			const response = await this.aiService.expandKnowledge(
+				selectionCtx.selectedText,
+				selectionCtx.surroundingContext,
+				userQuestion
+			);
 			
 			const now = new Date();
 			const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-			const noteTitle = response.title || this.generateFallbackTitle(selection);
+			const noteTitle = response.title || this.generateFallbackTitle(selectionCtx.selectedText);
 			const sanitizedTitle = this.sanitizeFileName(noteTitle);
 			const fileName = `${dateStr}_${sanitizedTitle}`;
 
-			const frontMatter = this.generateFrontMatter(selection, view.file?.basename || 'Unknown', response.content);
+			const frontMatter = this.generateFrontMatter(
+				selectionCtx.selectedText,
+				selectionCtx.sourceNoteName,
+				response.content
+			);
 
 			let noteContent = await this.getTemplateContent();
 			
@@ -158,8 +173,8 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 
 			const newFile = await this.app.vault.create(savePath, noteContent);
 
-			const wikiLink = `[[${newFile.basename}|${selection}]]`;
-			editor.replaceSelection(wikiLink);
+			const wikiLink = `[[${newFile.basename}|${selectionCtx.selectedText}]]`;
+			await this.replaceTextAtContext(selectionCtx, wikiLink);
 
 			const costStr = response.estimatedCost.toFixed(6);
 			new Notice(
@@ -177,26 +192,32 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 	}
 
 	private async webSearchFromEditor(editor: Editor, view: MarkdownView, userQuestion: string = '') {
-		const selection = editor.getSelection();
-		if (!selection) {
+		const selectionCtx = this.captureSelectionContext(editor, view);
+		if (!selectionCtx) {
 			new Notice('Please select some text to search');
 			return;
 		}
 
-		const context = this.getSurroundingContext(editor);
-
 		new Notice('🔍 Searching the web... Please wait.');
 
 		try {
-			const response = await this.aiService.webSearch(selection, context, userQuestion);
+			const response = await this.aiService.webSearch(
+				selectionCtx.selectedText,
+				selectionCtx.surroundingContext,
+				userQuestion
+			);
 			
 			const now = new Date();
 			const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-			const noteTitle = response.title || this.generateFallbackTitle(selection);
+			const noteTitle = response.title || this.generateFallbackTitle(selectionCtx.selectedText);
 			const sanitizedTitle = this.sanitizeFileName(noteTitle);
 			const fileName = `${dateStr}_${sanitizedTitle}`;
 
-			const frontMatter = this.generateFrontMatter(selection, view.file?.basename || 'Unknown', response.content);
+			const frontMatter = this.generateFrontMatter(
+				selectionCtx.selectedText,
+				selectionCtx.sourceNoteName,
+				response.content
+			);
 
 			let noteContent = await this.getTemplateContent();
 			
@@ -211,8 +232,8 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 
 			const newFile = await this.app.vault.create(savePath, noteContent);
 
-			const wikiLink = `[[${newFile.basename}|${selection}]]`;
-			editor.replaceSelection(wikiLink);
+			const wikiLink = `[[${newFile.basename}|${selectionCtx.selectedText}]]`;
+			await this.replaceTextAtContext(selectionCtx, wikiLink);
 
 			const costStr = response.estimatedCost.toFixed(6);
 			new Notice(
@@ -240,6 +261,56 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 			context += editor.getLine(i) + '\n';
 		}
 		return context;
+	}
+
+	private captureSelectionContext(editor: Editor, view: MarkdownView): SelectionContext | null {
+		const selection = editor.getSelection();
+		if (!selection || !view.file) {
+			return null;
+		}
+
+		return {
+			filePath: view.file.path,
+			from: editor.getCursor('from'),
+			to: editor.getCursor('to'),
+			selectedText: selection,
+			surroundingContext: this.getSurroundingContext(editor),
+			sourceNoteName: view.file.basename,
+		};
+	}
+
+	private async replaceTextAtContext(ctx: SelectionContext, newText: string): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(ctx.filePath);
+		if (!(file instanceof TFile)) {
+			new Notice(`❌ Original file not found: ${ctx.filePath}`);
+			return;
+		}
+
+		const content = await this.app.vault.read(file);
+		const lines = content.split('\n');
+
+		let charIndex = 0;
+		for (let i = 0; i < ctx.from.line; i++) {
+			charIndex += lines[i].length + 1;
+		}
+		const fromIndex = charIndex + ctx.from.ch;
+
+		charIndex = 0;
+		for (let i = 0; i < ctx.to.line; i++) {
+			charIndex += lines[i].length + 1;
+		}
+		const toIndex = charIndex + ctx.to.ch;
+
+		const currentSelectedText = content.substring(fromIndex, toIndex);
+		if (currentSelectedText !== ctx.selectedText) {
+			new Notice(`⚠️ Original text was modified. Inserting at end of file instead.`);
+			const appendedContent = content + '\n\n' + newText;
+			await this.app.vault.modify(file, appendedContent);
+			return;
+		}
+
+		const newContent = content.substring(0, fromIndex) + newText + content.substring(toIndex);
+		await this.app.vault.modify(file, newContent);
 	}
 
 	private sanitizeFileName(title: string): string {
