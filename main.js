@@ -612,9 +612,7 @@ ${aiContent}`;
     const combinedText = `${selectedText}
 ${aiContent}`;
     const extractedTags = this.keywordExtractor.extractKeywords(combinedText, selectedText);
-    const baseTags = ["knowledge-expansion", "ai-generated"];
-    const allTags = [...baseTags, ...extractedTags];
-    const tagsYaml = allTags.map((t) => `  - ${t}`).join("\n");
+    const tagsYaml = extractedTags.map((t) => `  - ${t}`).join("\n");
     return `---
 type: knowledge-expansion
 source: "[[${sourceNote}]]"
