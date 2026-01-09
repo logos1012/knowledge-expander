@@ -197,33 +197,41 @@ ${context}${questionSection}
     if (!this.settings.openaiApiKey) {
       throw new Error("OpenAI API key is not configured");
     }
-    const response = await (0, import_obsidian.requestUrl)({
-      url: "https://api.openai.com/v1/chat/completions",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.settings.openaiApiKey}`
-      },
-      body: JSON.stringify({
-        model: this.settings.openaiModel,
-        messages: [
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 2e3
-      })
-    });
-    const data = response.json;
-    const content = data.choices[0].message.content;
-    const usage = data.usage;
-    return {
-      title: "",
-      content,
-      inputTokens: usage.prompt_tokens,
-      outputTokens: usage.completion_tokens,
-      totalTokens: usage.total_tokens,
-      estimatedCost: this.calculateCost("openai", this.settings.openaiModel, usage.prompt_tokens, usage.completion_tokens)
-    };
+    const model = this.settings.openaiModel || "gpt-4o-mini";
+    console.log("OpenAI request - model:", model);
+    try {
+      const response = await (0, import_obsidian.requestUrl)({
+        url: "https://api.openai.com/v1/chat/completions",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.settings.openaiApiKey}`
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 2e3
+        })
+      });
+      const data = response.json;
+      const content = data.choices[0].message.content;
+      const usage = data.usage;
+      return {
+        title: "",
+        content,
+        inputTokens: usage.prompt_tokens,
+        outputTokens: usage.completion_tokens,
+        totalTokens: usage.total_tokens,
+        estimatedCost: this.calculateCost("openai", model, usage.prompt_tokens, usage.completion_tokens)
+      };
+    } catch (error) {
+      console.error("OpenAI API error:", error);
+      console.error("Model used:", model);
+      throw error;
+    }
   }
   async callOpenAIWebSearch(prompt) {
     if (!this.settings.openaiApiKey) {
