@@ -15,16 +15,41 @@ export class AIService {
 	async expandKnowledge(selectedText: string, context: string): Promise<AIResponse> {
 		const prompt = this.buildPrompt(selectedText, context);
 
+		let response: AIResponse;
 		switch (this.settings.aiProvider) {
 			case 'openai':
-				return this.callOpenAI(prompt);
+				response = await this.callOpenAI(prompt);
+				break;
 			case 'gemini':
-				return this.callGemini(prompt);
+				response = await this.callGemini(prompt);
+				break;
 			case 'claude':
-				return this.callClaude(prompt);
+				response = await this.callClaude(prompt);
+				break;
 			default:
 				throw new Error(`Unknown AI provider: ${this.settings.aiProvider}`);
 		}
+
+		response.content = this.stripMarkdownCodeBlock(response.content);
+		return response;
+	}
+
+	private stripMarkdownCodeBlock(content: string): string {
+		let result = content.trim();
+		
+		if (result.startsWith('```markdown')) {
+			result = result.slice('```markdown'.length);
+		} else if (result.startsWith('```md')) {
+			result = result.slice('```md'.length);
+		} else if (result.startsWith('```')) {
+			result = result.slice(3);
+		}
+		
+		if (result.endsWith('```')) {
+			result = result.slice(0, -3);
+		}
+		
+		return result.trim();
 	}
 
 	private buildPrompt(selectedText: string, context: string): string {
