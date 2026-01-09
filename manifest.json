@@ -1,0 +1,10 @@
+{
+	"id": "knowledge-expander",
+	"name": "Knowledge Finder",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Expand your knowledge by generating AI-powered explanations for selected text",
+	"author": "Jake",
+	"authorUrl": "https://github.com/jake",
+	"isDesktopOnly": false
+}
