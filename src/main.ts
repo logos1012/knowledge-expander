@@ -177,18 +177,28 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 			await this.replaceTextAtContext(selectionCtx, wikiLink);
 
 			const costStr = response.estimatedCost.toFixed(6);
-			new Notice(
+			this.showClickableNotice(
 				`✅ Knowledge expanded!\n` +
 				`📝 Note created: ${newFile.basename}\n` +
 				`💰 Estimated cost: $${costStr}\n` +
-				`📊 Tokens: ${response.totalTokens}`,
-				10000
+				`📊 Tokens: ${response.totalTokens}\n` +
+				`👆 Click to open note`,
+				newFile
 			);
 
 		} catch (error) {
 			console.error('Knowledge expansion error:', error);
 			new Notice(`❌ Error: ${error.message}`);
 		}
+	}
+
+	private showClickableNotice(message: string, file: TFile): void {
+		const notice = new Notice(message, 10000);
+		notice.noticeEl.style.cursor = 'pointer';
+		notice.noticeEl.addEventListener('click', () => {
+			this.app.workspace.getLeaf().openFile(file);
+			notice.hide();
+		});
 	}
 
 	private async webSearchFromEditor(editor: Editor, view: MarkdownView, userQuestion: string = '') {
@@ -236,12 +246,13 @@ export default class KnowledgeExpanderPlugin extends Plugin {
 			await this.replaceTextAtContext(selectionCtx, wikiLink);
 
 			const costStr = response.estimatedCost.toFixed(6);
-			new Notice(
+			this.showClickableNotice(
 				`✅ Web search complete!\n` +
 				`📝 Note created: ${newFile.basename}\n` +
 				`💰 Estimated cost: $${costStr}\n` +
-				`📊 Tokens: ${response.totalTokens}`,
-				10000
+				`📊 Tokens: ${response.totalTokens}\n` +
+				`👆 Click to open note`,
+				newFile
 			);
 
 		} catch (error) {

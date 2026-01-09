@@ -887,17 +887,26 @@ ${aiContent}`;
       const wikiLink = `[[${newFile.basename}|${selectionCtx.selectedText}]]`;
       await this.replaceTextAtContext(selectionCtx, wikiLink);
       const costStr = response.estimatedCost.toFixed(6);
-      new import_obsidian4.Notice(
+      this.showClickableNotice(
         `\u2705 Knowledge expanded!
 \u{1F4DD} Note created: ${newFile.basename}
 \u{1F4B0} Estimated cost: $${costStr}
-\u{1F4CA} Tokens: ${response.totalTokens}`,
-        1e4
+\u{1F4CA} Tokens: ${response.totalTokens}
+\u{1F446} Click to open note`,
+        newFile
       );
     } catch (error) {
       console.error("Knowledge expansion error:", error);
       new import_obsidian4.Notice(`\u274C Error: ${error.message}`);
     }
+  }
+  showClickableNotice(message, file) {
+    const notice = new import_obsidian4.Notice(message, 1e4);
+    notice.noticeEl.style.cursor = "pointer";
+    notice.noticeEl.addEventListener("click", () => {
+      this.app.workspace.getLeaf().openFile(file);
+      notice.hide();
+    });
   }
   async webSearchFromEditor(editor, view, userQuestion = "") {
     const selectionCtx = this.captureSelectionContext(editor, view);
@@ -936,12 +945,13 @@ ${aiContent}`;
       const wikiLink = `[[${newFile.basename}|${selectionCtx.selectedText}]]`;
       await this.replaceTextAtContext(selectionCtx, wikiLink);
       const costStr = response.estimatedCost.toFixed(6);
-      new import_obsidian4.Notice(
+      this.showClickableNotice(
         `\u2705 Web search complete!
 \u{1F4DD} Note created: ${newFile.basename}
 \u{1F4B0} Estimated cost: $${costStr}
-\u{1F4CA} Tokens: ${response.totalTokens}`,
-        1e4
+\u{1F4CA} Tokens: ${response.totalTokens}
+\u{1F446} Click to open note`,
+        newFile
       );
     } catch (error) {
       console.error("Web search error:", error);
